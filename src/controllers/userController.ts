@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { AppUser, UserRole } from '../models/AppUser.js';
+import { getAuthUser } from '../config/authHelper.js';
 
 // Developer emails — only these can be "developer" role (set in .env with comma or ||)
 const getDeveloperEmails = (): string[] => {
@@ -63,6 +64,11 @@ export const syncOrGetUserRole = async (req: Request, res: Response): Promise<vo
 // ─── Get all users (Developer only) ─────────────────────────────────────────
 export const getAllUsers = async (req: Request, res: Response): Promise<void> => {
   try {
+    const authUser = await getAuthUser(req);
+    if (!authUser || authUser.role !== 'developer') {
+      res.status(403).json({ success: false, message: 'Only developers can view users.' });
+      return;
+    }
     const users = await AppUser.find({}).sort({ createdAt: -1 });
     res.json({ success: true, count: users.length, data: users });
   } catch (error: any) {
@@ -84,7 +90,7 @@ export const updateUserRole = async (req: Request, res: Response): Promise<void>
     }
 
     // Verify requestor is a developer
-    const requestor = await AppUser.findOne({ uid: requestorUid });
+    const requestor = (await getAuthUser(req)) || (await AppUser.findOne({ uid: requestorUid }));
     if (!requestor || requestor.role !== 'developer') {
       res.status(403).json({ success: false, message: 'Only developers can change user roles.' });
       return;
@@ -112,7 +118,7 @@ export const deleteUser = async (req: Request, res: Response): Promise<void> => 
     const { id } = req.params;
     const { requestorUid } = req.body;
 
-    const requestor = await AppUser.findOne({ uid: requestorUid });
+    const requestor = (await getAuthUser(req)) || (await AppUser.findOne({ uid: requestorUid }));
     if (!requestor || requestor.role !== 'developer') {
       res.status(403).json({ success: false, message: 'Only developers can delete users.' });
       return;
